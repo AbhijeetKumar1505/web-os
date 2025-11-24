@@ -5,6 +5,7 @@ import type { HandTrackingResult, GestureEvent, GestureType, HandLandmark } from
 interface GestureState {
   lastGesture: GestureType | null;
   gestureStartTime: number;
+  gestureId: string | null;
   confidence: number;
   position: { x: number; y: number };
   velocity: { x: number; y: number };
@@ -42,6 +43,7 @@ export class InputAbstractionLayer {
       state = {
         lastGesture: null,
         gestureStartTime: 0,
+        gestureId: null,
         confidence: 0,
         position: { x: 0, y: 0 },
         velocity: { x: 0, y: 0 },
@@ -77,6 +79,7 @@ export class InputAbstractionLayer {
       if (state.lastGesture !== detectedGesture.type) {
         state.lastGesture = detectedGesture.type;
         state.gestureStartTime = now;
+        state.gestureId = Math.random().toString(36).slice(2, 11);
         state.confidence = detectedGesture.confidence;
       } else {
         // Update confidence with moving average
@@ -88,6 +91,7 @@ export class InputAbstractionLayer {
         (now - state.gestureStartTime) >= this.gestureHoldTime) {
 
         const gestureEvent: GestureEvent = {
+          id: state.gestureId || undefined,
           type: detectedGesture.type,
           confidence: state.confidence,
           normalizedPosition: { ...state.position },
@@ -101,6 +105,7 @@ export class InputAbstractionLayer {
     } else {
       // Reset gesture state if no gesture detected
       state.lastGesture = null;
+      state.gestureId = null;
       state.confidence = 0;
     }
   }
