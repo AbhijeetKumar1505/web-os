@@ -190,7 +190,7 @@ export class WebOS {
         this.windowManager.openLauncher();
         break;
       case 'drag':
-        this.windowManager.startDrag(event);
+        this.windowManager.handleDragGesture(event);
         break;
       case 'click':
         this.windowManager.handleClick(event);

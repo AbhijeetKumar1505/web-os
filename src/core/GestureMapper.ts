@@ -20,7 +20,7 @@ export class GestureMapper {
   private setupDefaultMappings(): void {
     const defaultMappings: GestureMapping[] = [
       { gesture: 'open_palm', action: 'open-launcher', global: true },
-      { gesture: 'pinch', action: 'drag', requireFocus: true, holdMillis: 80 },
+      { gesture: 'pinch', action: 'drag', requireFocus: true, holdMillis: 80, continuous: true },
       { gesture: 'push_forward', action: 'click', requireFocus: true },
       { gesture: 'swipe_left', action: 'prev-desktop', global: true },
       { gesture: 'swipe_right', action: 'next-desktop', global: true },
@@ -45,6 +45,14 @@ export class GestureMapper {
     // Rate limiting policy
     const lastActionTimes = new Map<string, number>();
     this.policies.set('rateLimit', (event: GestureEvent) => {
+      const mapping = this.mappings.get(event.type);
+
+      // If the gesture is continuous (like drag), we skip the standard rate limit
+      // or use a much shorter interval (e.g. frame rate based)
+      if (mapping?.continuous) {
+        return true;
+      }
+
       const now = Date.now();
       const lastTime = lastActionTimes.get(event.type) || 0;
       const minInterval = 200; // 200ms minimum between same gestures

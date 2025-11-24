@@ -153,12 +153,12 @@ export class InterAppCommunication {
         if (message.replyTo) {
           await this.sendMessage(to, from, 'reply', result, message.id);
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error(`Error handling message in ${to}:`, error);
         
         // Send error reply
         if (message.replyTo) {
-          await this.sendMessage(to, from, 'error', { error: error.message }, message.id);
+          await this.sendMessage(to, from, 'error', { error: error.message || 'Unknown error' }, message.id);
         }
       }
     } else {

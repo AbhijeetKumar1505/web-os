@@ -8,6 +8,37 @@ interface FileManagerAppProps {
   windowId: string;
 }
 
+// Map VFSNode to local component state structure if needed, or use VFSNode directly
+// For simplicity, we'll assume VFSNode is compatible enough or we'll adapt usage.
+// However, the original code used `FileSystemItem` which seems to be a local interface that was missing.
+// We'll define it here based on usage or adapt to use VFSNode.
+
+// The original code used `initialFileSystem` which is also missing.
+// We should fetch data from `vfs`.
+
+type FileSystemItem = {
+    id: string;
+    name: string;
+    type: 'file' | 'folder'; // VFS uses 'directory'
+    parent?: string;
+    content?: string;
+    size?: number;
+    modified: Date;
+    icon?: string;
+}
+
+// Helper to convert VFSNode to FileSystemItem
+const vfsNodeToItem = (node: VFSNode): FileSystemItem => ({
+    id: node.id,
+    name: node.name,
+    type: node.type === 'directory' ? 'folder' : 'file',
+    parent: node.parent,
+    content: node.content,
+    size: node.size,
+    modified: node.modified,
+    icon: getFileIcon(node)
+});
+
 const getFileIcon = (node: VFSNode): string => {
   if (node.type === 'directory') return '📁';
   
@@ -28,19 +59,96 @@ const getFileIcon = (node: VFSNode): string => {
 };
 
 export const FileManagerApp: React.FC<FileManagerAppProps> = ({ windowId }) => {
-  const [fileSystem, setFileSystem] = useState<FileSystemItem[]>(initialFileSystem);
-  const [currentPath, setCurrentPath] = useState<string[]>([]);
+  // Use VFS to get initial state
+  const [fileSystem, setFileSystem] = useState<FileSystemItem[]>([]);
+
+  // Load initial data from VFS
+  useEffect(() => {
+    // This is a simplification. Ideally we'd traverse the whole VFS or just the current directory.
+    // Since the original code expected a flat list of all items, we'll try to replicate that or adapt.
+    // But `vfs` doesn't expose a "get all nodes" easily.
+    // Let's assume we just want to show the root to start.
+
+    // Actually, `vfs` is a singleton and has internal state. The original code was using a local state `fileSystem`.
+    // Let's try to sync with VFS.
+
+    // For now, let's just use what we have in VFS stats or similar?
+    // Wait, the original code had `initialFileSystem` which was missing.
+    // I will mock it for now to fix the build, but hooking it up to real VFS is better.
+
+    // Let's create a fake initial file system based on VFS structure if possible,
+    // or just defined here to fix the "Cannot find name 'initialFileSystem'" error.
+
+    // Let's try to actually pull from VFS recursively to populate the view
+    // This is a bit of a hack to adapt VFS to the existing flat-list-state component structure
+    const allItems: FileSystemItem[] = [];
+    const traverse = (path: string) => {
+        const nodes = vfs.listDirectory(path);
+        for (const node of nodes) {
+            allItems.push(vfsNodeToItem(node));
+            if (node.type === 'directory') {
+                const nodePath = path === '/' ? `/${node.name}` : `${path}/${node.name}`;
+                traverse(nodePath);
+            }
+        }
+    }
+
+    traverse('/');
+    setFileSystem(allItems);
+
+  }, []);
+
+  const [currentPath, setCurrentPath] = useState<string[]>([]); // Array of IDs
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [showPreview, setShowPreview] = useState(false);
   const [previewItem, setPreviewItem] = useState<FileSystemItem | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item?: FileSystemItem } | null>(null);
 
-  const currentFolderId = currentPath.length > 0 ? currentPath[currentPath.length - 1] : null;
+  const currentFolderId = currentPath.length > 0 ? currentPath[currentPath.length - 1] : undefined; // undefined for root if using flat list logic
   
-  const currentItems = fileSystem.filter(item => 
-    currentFolderId ? item.parent === currentFolderId : !item.parent
-  );
+  // If currentPath is empty, we are at root.
+  // The original code used `!item.parent` for root items.
+  // In VFS, root items (under /) have parent as root node ID probably?
+  // Let's check VFS implementation.
+  // VFS: createNode('/', 'directory', undefined, ''); -> Root node has NO parent.
+  // VFS: createNode('home', 'directory', root.id, ''); -> Home has root.id as parent.
+
+  // So if `currentFolderId` is null/undefined, we want items with parent = root.id?
+  // Or items with parent = undefined?
+  // The VFS root node has parent undefined. But we probably don't show the root node itself, but its children.
+  // The children of root have parent = root.id.
+
+  // We need to know the ID of the root node to find its children if we are at "root" path.
+  // VFS doesn't expose root ID easily publicly, but `vfs.listDirectory('/')` works.
+
+  // Let's rely on `vfs.listDirectory` logic instead of filtering a flat list `fileSystem` state?
+  // That would be a bigger refactor.
+
+  // Let's stick to fixing the compilation errors by defining the missing types and variables.
+
+  const currentItems = fileSystem.filter(item => {
+      if (currentFolderId) {
+          return item.parent === currentFolderId;
+      }
+      // If no current folder (root), we want items that are children of the root directory.
+      // In our `traverse` above, we added all items.
+      // The items at root of VFS have parent = rootNode.id.
+      // We don't have rootNode.id easily.
+      // But wait, `vfs.listDirectory('/')` returns the nodes.
+      // Let's assume we want to show items that don't have a parent in our *local* state view?
+      // Or we can just fetch current items from VFS dynamically?
+
+      // Let's change `currentItems` to be derived from VFS directly if possible, or just fix the filter.
+      // If we use the flat list from `traverse`, we need to know the parent ID.
+      // The items at the top level of `traverse('/')` have parent set to the ID of the root node.
+
+      // Let's just fix the types for now and allow the logic to be a bit broken if it's too complex,
+      // OR fix it properly.
+
+      // The simplest fix for "Cannot find name 'initialFileSystem'" is to define it.
+      return item.parent === currentFolderId || (!currentFolderId && !fileSystem.find(p => p.id === item.parent));
+  });
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return '';
@@ -364,7 +472,7 @@ export const FileManagerApp: React.FC<FileManagerAppProps> = ({ windowId }) => {
                   onClick={() => {
                     if (contextMenu.item?.type === 'folder') {
                       navigateToFolder(contextMenu.item.id);
-                    } else {
+                    } else if (contextMenu.item) {
                       setPreviewItem(contextMenu.item);
                       setShowPreview(true);
                     }

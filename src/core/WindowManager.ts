@@ -9,6 +9,7 @@ export class WindowManager {
     windowId: string | null;
     startPosition: { x: number; y: number };
     offset: { x: number; y: number };
+    gestureSequenceId?: string;
   } = {
       isDragging: false,
       windowId: null,
@@ -16,6 +17,7 @@ export class WindowManager {
       offset: { x: 0, y: 0 }
     };
 
+  private dragTimeout: ReturnType<typeof setTimeout> | null = null;
   private nextZIndex = 1000;
 
   async initialize(): Promise<void> {
@@ -179,6 +181,59 @@ export class WindowManager {
   }
 
   // Gesture-based interactions
+  handleDragGesture(event: GestureEvent): void {
+    // Reset drag timeout whenever we receive a gesture event
+    if (this.dragTimeout) {
+      clearTimeout(this.dragTimeout);
+    }
+
+    // Set a timeout to end drag if no events are received for a while (e.g., gesture ended)
+    this.dragTimeout = setTimeout(() => {
+      this.endDrag();
+    }, 200);
+
+    const screenX = event.normalizedPosition.x * window.innerWidth;
+    const screenY = event.normalizedPosition.y * window.innerHeight;
+
+    // Check if we are already dragging this specific gesture sequence
+    if (this.dragState.isDragging &&
+        this.dragState.windowId &&
+        this.dragState.gestureSequenceId === event.id) {
+
+      // We are in the middle of a drag, so update position
+      const newX = screenX - this.dragState.offset.x;
+      const newY = screenY - this.dragState.offset.y;
+
+      this.updateWindowPosition(this.dragState.windowId, { x: newX, y: newY });
+      return;
+    }
+
+    // If we're here, it's either a new drag or the sequence ID changed
+    // If we were dragging something else (different sequence), end it implicitly
+    if (this.dragState.isDragging && this.dragState.gestureSequenceId !== event.id) {
+        // Just overwrite the state, effectively ending the previous drag
+    }
+
+    const store = useSystemStore.getState();
+    const windowId = store.focusedWindowId;
+
+    if (windowId) {
+      const windowObj = store.getWindow(windowId);
+      if (windowObj) {
+        this.dragState = {
+          isDragging: true,
+          windowId,
+          startPosition: { x: screenX, y: screenY },
+          offset: {
+            x: screenX - windowObj.position.x,
+            y: screenY - windowObj.position.y
+          },
+          gestureSequenceId: event.id
+        };
+      }
+    }
+  }
+
   startDrag(event: GestureEvent): void;
   startDrag(windowId: string, position: { x: number; y: number }): void;
   startDrag(eventOrWindowId: GestureEvent | string, position?: { x: number; y: number }): void {
@@ -201,20 +256,18 @@ export class WindowManager {
         };
       }
     } else {
-      // Gesture-based drag
+      // Legacy Gesture-based drag (forward to new handler)
       const event = eventOrWindowId;
-      const store = useSystemStore.getState();
-
-      if (store.focusedWindowId) {
-        const screenX = event.normalizedPosition.x * window.innerWidth;
-        const screenY = event.normalizedPosition.y * window.innerHeight;
-
-        this.startDrag(store.focusedWindowId, { x: screenX, y: screenY });
-      }
+      this.handleDragGesture(event);
     }
   }
 
   private endDrag(): void {
+    if (this.dragTimeout) {
+      clearTimeout(this.dragTimeout);
+      this.dragTimeout = null;
+    }
+
     this.dragState = {
       isDragging: false,
       windowId: null,

@@ -15,6 +15,7 @@ export interface HandTrackingResult {
 }
 
 export interface GestureEvent {
+  id?: string;
   type: GestureType;
   confidence: number;
   normalizedPosition: { x: number; y: number };
@@ -44,6 +45,7 @@ export interface GestureMapping {
   global?: boolean;
   holdMillis?: number;
   confidenceThreshold?: number;
+  continuous?: boolean;
 }
 
 export interface WebOSWindow {
