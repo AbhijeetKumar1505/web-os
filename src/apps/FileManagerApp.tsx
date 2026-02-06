@@ -1,6 +1,6 @@
 // File Manager Application - Virtual File System Browser
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { vfs, type VFSNode } from '../core/VirtualFileSystem';
 
@@ -106,6 +106,9 @@ export const FileManagerApp: React.FC<FileManagerAppProps> = ({ windowId }) => {
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item?: FileSystemItem } | null>(null);
 
   const currentFolderId = currentPath.length > 0 ? currentPath[currentPath.length - 1] : undefined; // undefined for root if using flat list logic
+
+  const itemById = useMemo(() => new Map(fileSystem.map((item) => [item.id, item])), [fileSystem]);
+  const itemIdSet = useMemo(() => new Set(fileSystem.map((item) => item.id)), [fileSystem]);
   
   // If currentPath is empty, we are at root.
   // The original code used `!item.parent` for root items.
@@ -127,28 +130,12 @@ export const FileManagerApp: React.FC<FileManagerAppProps> = ({ windowId }) => {
 
   // Let's stick to fixing the compilation errors by defining the missing types and variables.
 
-  const currentItems = fileSystem.filter(item => {
-      if (currentFolderId) {
-          return item.parent === currentFolderId;
-      }
-      // If no current folder (root), we want items that are children of the root directory.
-      // In our `traverse` above, we added all items.
-      // The items at root of VFS have parent = rootNode.id.
-      // We don't have rootNode.id easily.
-      // But wait, `vfs.listDirectory('/')` returns the nodes.
-      // Let's assume we want to show items that don't have a parent in our *local* state view?
-      // Or we can just fetch current items from VFS dynamically?
-
-      // Let's change `currentItems` to be derived from VFS directly if possible, or just fix the filter.
-      // If we use the flat list from `traverse`, we need to know the parent ID.
-      // The items at the top level of `traverse('/')` have parent set to the ID of the root node.
-
-      // Let's just fix the types for now and allow the logic to be a bit broken if it's too complex,
-      // OR fix it properly.
-
-      // The simplest fix for "Cannot find name 'initialFileSystem'" is to define it.
-      return item.parent === currentFolderId || (!currentFolderId && !fileSystem.find(p => p.id === item.parent));
-  });
+  const currentItems = useMemo(() => {
+    if (currentFolderId) {
+      return fileSystem.filter((item) => item.parent === currentFolderId);
+    }
+    return fileSystem.filter((item) => !item.parent || !itemIdSet.has(item.parent));
+  }, [currentFolderId, fileSystem, itemIdSet]);
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return '';
@@ -161,25 +148,25 @@ export const FileManagerApp: React.FC<FileManagerAppProps> = ({ windowId }) => {
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const navigateToFolder = (folderId: string) => {
-    const folder = fileSystem.find(item => item.id === folderId);
+  const navigateToFolder = useCallback((folderId: string) => {
+    const folder = itemById.get(folderId);
     if (folder && folder.type === 'folder') {
       setCurrentPath([...currentPath, folderId]);
       setSelectedItems(new Set());
     }
-  };
+  }, [currentPath, itemById]);
 
-  const navigateUp = () => {
+  const navigateUp = useCallback(() => {
     if (currentPath.length > 0) {
       setCurrentPath(currentPath.slice(0, -1));
       setSelectedItems(new Set());
     }
-  };
+  }, [currentPath]);
 
-  const navigateToPath = (index: number) => {
+  const navigateToPath = useCallback((index: number) => {
     setCurrentPath(currentPath.slice(0, index + 1));
     setSelectedItems(new Set());
-  };
+  }, [currentPath]);
 
   const handleItemClick = (item: FileSystemItem, event: React.MouseEvent) => {
     if (event.ctrlKey || event.metaKey) {
@@ -279,7 +266,7 @@ export const FileManagerApp: React.FC<FileManagerAppProps> = ({ windowId }) => {
               Home
             </button>
             {currentPath.map((folderId, index) => {
-              const folder = fileSystem.find(item => item.id === folderId);
+              const folder = itemById.get(folderId);
               return (
                 <React.Fragment key={folderId}>
                   <span className="text-gray-400">/</span>
